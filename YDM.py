@@ -4,6 +4,7 @@ import threading
 import yt_dlp
 import time
 import webbrowser
+import os
 
 # Global control flags
 download_thread = None
@@ -41,7 +42,7 @@ def download_video():
             time.sleep(0.5)
         if d['status'] == 'downloading':
             percent = d.get('_percent_str', '').strip()
-            progress_label.config(text=f"{percent}")
+            progress_label.config(text=f"Download: {percent}")
             try:
                 progress = float(percent.replace('%', ''))
                 progress_var.set(progress)
@@ -72,11 +73,67 @@ def download_video():
     elif choice == 'Video (MP4)':
         ydl_opts['format'] = 'bestvideo+bestaudio/best'
 
+
+# Function to run the download in a separate thread
     def run_download():
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                ydl.download([url])
-            messagebox.showinfo("Success", "Download completed!")
+                # Get video info without downloading to prepare filename
+                info = ydl.extract_info(url, download=False)
+                file_path = ydl.prepare_filename(info)
+
+                # Check if the file already exists
+                def open_folder():
+                    import subprocess
+                    folder = os.path.dirname(file_path)
+                    if os.name == 'nt':  # Windows
+                        os.startfile(folder)
+                    elif os.name == 'posix':
+                        subprocess.Popen(['xdg-open', folder] if 'linux' in os.sys.platform else ['open', folder])
+
+                if os.path.exists(file_path):
+                    messagebox.showinfo("File Exists", f"The file already exists:\n{os.path.basename(file_path)}\n\nDownload skipped.")
+                    progress_label.config(text="Download skipped. File already exists.")
+                    progress_var.set(100)
+                    progress_bar.update_idletasks()
+                    #return  # Skip the download
+
+                    #open the existing file
+                    result = messagebox.askquestion("File Exists", "File already existed!\n\nWould you like to open the file?", icon='info')
+                    if result == 'yes':
+                        open_folder()
+                    return
+                else:
+                    # Proceed with actual download
+                    ydl.download([url])
+
+            progress_label.config(text="Download complete.")
+            progress_var.set(100)
+            progress_bar.update_idletasks()
+
+            def open_folder():
+                import subprocess
+                folder = os.path.dirname(file_path)
+                if os.name == 'nt':  # Windows
+                    os.startfile(folder)
+                elif os.name == 'posix':
+                    subprocess.Popen(['xdg-open', folder] if 'linux' in os.sys.platform else ['open', folder])
+
+            def play_file():
+                import subprocess
+                if os.name == 'nt':
+                    os.startfile(file_path)
+                elif os.name == 'posix':
+                    subprocess.Popen(['xdg-open', save_path] if 'linux' in os.sys.platform else ['open', save_path])
+
+            result = messagebox.askquestion("Download Completed", "Download completed successfully!\n\nWould you like to open the folder?", icon='info')
+            if result == 'yes':
+                open_folder()
+            else:
+                play = messagebox.askyesno("Play File", "Do you want to play the downloaded file now?")
+                if play:
+                    play_file()
+
         except Exception as e:
             if str(e) == "Download cancelled by user.":
                 progress_label.config(text="Download cancelled.")
@@ -86,6 +143,8 @@ def download_video():
 
     download_thread = threading.Thread(target=run_download)
     download_thread.start()
+
+
 
 def pause_download():
     global is_paused
@@ -143,7 +202,7 @@ progress_bar = ttk.Progressbar(app, length=300, variable=progress_var, maximum=1
 # Developer Info and Link
 ttk.Separator(app, orient='horizontal').pack(fill='x', padx=10, pady=10)
 tk.Label(app, text="Developed by Ahamed_Shojib", font=("Arial", 9)).pack(pady=(15, 0))
-link_label = tk.Label(app, text="Visit GitHub Profile", fg="blue", cursor="hand2", font=("Arial", 9, "underline"))
+link_label = tk.Label(app, text="Visit GitHub", fg="blue", cursor="hand2", font=("Arial", 9,'italic'))
 link_label.pack()
 link_label.bind("<Button-1>", open_link)
 
